@@ -4,14 +4,14 @@ const { ethers, upgrades } = require('hardhat')
 const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
 
 describe('CoinSenderClaim', function () {
-  let CoinSenderClaim, coinSenderClaim, owner, addr1, addr2, addr3
+  let CoinSenderClaim, coinSenderClaim, owner, addr1, addr2, addr3, addr4
   let erc20, erc20_2
   let minFee = ethers.utils.parseEther('0.01')
 
   beforeEach(async () => {
     // Here we create a new contract for each test
     CoinSenderClaim = await ethers.getContractFactory('CoinSenderClaim');
-    [owner, addr1, addr2, addr3] = await ethers.getSigners()
+    [owner, addr1, addr2, addr3, addr4] = await ethers.getSigners()
 
     // Deploy ERC20 token for testing purpose
     const ERC20 = await ethers.getContractFactory('ERC20Mock')
@@ -234,5 +234,87 @@ describe('CoinSenderClaim', function () {
       await expect(nonOwner.setMinFee(newMinFee)).to.be.revertedWith('Ownable: caller is not the owner')
     })
 
+  })
+
+  describe('Cancellation and Claims', function () {
+    it('Should allow a sender to cancel a transfer and prevent recipient from claiming', async function () {
+      const recipients = [addr2.address, addr3.address, addr4.address]
+      const amounts = [ethers.utils.parseEther('10'), ethers.utils.parseEther('10'), ethers.utils.parseEther('10')]
+
+      // Sending coins from addr1 to addr2, addr3, and addr1
+      await erc20.connect(addr1).approve(coinSenderClaim.address, ethers.utils.parseEther('30'))
+      await coinSenderClaim.connect(addr1).sendCoins(erc20.address, recipients, amounts, ethers.utils.parseEther('0.01'), { value: ethers.utils.parseEther('0.01') })
+
+      // addr1 canceling transfer for addr1
+      await coinSenderClaim.connect(addr1).cancelTransferBatch([addr2.address], [erc20.address])
+
+      // Check claim availability for addr1 (should be 0)
+      const claim = await coinSenderClaim.connect(addr2).viewClaims(addr2.address)
+      expect(claim.length).to.equal(0)
+
+      // addr1 trying to claim should be rejected
+      await expect(
+        coinSenderClaim.connect(addr1).claimCoinsBatch([addr1.address], [erc20.address])
+      ).to.be.revertedWith('No pending claim found')
+
+      // Check claim availability for addr2 and addr3 (should be tokens)
+      const claimAddr3 = await coinSenderClaim.connect(addr3).viewClaims(addr3.address)
+      const claimAddr4 = await coinSenderClaim.connect(addr4).viewClaims(addr4.address)
+      expect(claimAddr3.length).to.be.greaterThan(0)
+      expect(claimAddr4.length).to.be.greaterThan(0)
+
+      // addr2 and addr3 try to claim
+      await coinSenderClaim.connect(addr3).claimCoinsBatch([addr1.address], [erc20.address])
+      await coinSenderClaim.connect(addr4).claimCoinsBatch([addr1.address], [erc20.address])
+
+      // Check balances
+      expect(await erc20.balanceOf(addr3.address)).to.equal(ethers.utils.parseEther('10'))
+      expect(await erc20.balanceOf(addr4.address)).to.equal(ethers.utils.parseEther('10'))
+    })
+  })
+
+  describe('Sending ETH', function () {
+    it('Should allow a sender to send ETH and recipient to claim it', async function () {
+      const recipients = [addr2.address]
+      const amounts = [ethers.utils.parseEther('1')]
+
+      // Sender (addr1) sending ETH to addr2
+      await coinSenderClaim.connect(addr1).sendCoins(NATIVE_TOKEN, recipients, amounts, ethers.utils.parseEther('0.01'), { value: ethers.utils.parseEther('1.01') })
+
+      // Check that the contract now has the correct balance
+      expect(await ethers.provider.getBalance(coinSenderClaim.address)).to.equal(amounts[0])
+
+      const startBalance = await ethers.provider.getBalance(addr2.address);
+
+      // addr2 claims the ETH
+      await coinSenderClaim.connect(addr2).claimCoinsBatch([addr1.address], [NATIVE_TOKEN])
+
+      // Check addr2 balance (minus gas fees)
+      expect(await ethers.provider.getBalance(addr2.address)).to.be.closeTo(startBalance.add(amounts[0]), ethers.utils.parseEther('0.01'))
+    })
+
+    it('Should prevent a recipient from claiming ETH if sender cancels the transfer', async function () {
+      const recipients = [addr2.address]
+      const amounts = [ethers.utils.parseEther('1')]
+
+      // Sender (addr1) sending ETH to addr2
+      await coinSenderClaim.connect(addr1).sendCoins(NATIVE_TOKEN, recipients, amounts, ethers.utils.parseEther('0.01'), { value: ethers.utils.parseEther('1.01') })
+
+      // Sender (addr1) canceling the transfer
+      await coinSenderClaim.connect(addr1).cancelTransferBatch([addr2.address], [NATIVE_TOKEN])
+
+      const initBal = await ethers.provider.getBalance(addr1.address);
+
+      // addr2 trying to claim should be rejected
+      await expect(
+        coinSenderClaim.connect(addr2).claimCoinsBatch([addr1.address], [NATIVE_TOKEN])
+      ).to.be.revertedWith('No pending claim found')
+
+      // Check that the contract now has the correct balance (it should be zero)
+      expect(await ethers.provider.getBalance(coinSenderClaim.address)).to.equal(0)
+
+      // Check addr1 balance (minus gas fees). It should be increased by 1 ETH
+      expect(await ethers.provider.getBalance(addr1.address)).to.be.closeTo(initBal.add(amounts[0]), ethers.utils.parseEther('0.01'))
+    })
   })
 })

@@ -202,8 +202,8 @@ contract CoinSenderClaim is UUPSUpgradeable, ERC2771ContextUpgradeable, OwnableU
 
     function claimCoinsBatch(address[] calldata _senders, address[] calldata _currency)
     external whenNotPaused nonReentrant {
-        require(_senders.length > 0, "");
-        require(_senders.length == _currency.length, "");
+        require(_senders.length > 0, "Senders array cannot be empty");
+        require(_senders.length == _currency.length, "Senders and currencies arrays must have the same length");
 
         for (uint256 i = 0; i < _senders.length; i++) {
             _claimCoins(_msgSender(), _senders[i], _currency[i]);
