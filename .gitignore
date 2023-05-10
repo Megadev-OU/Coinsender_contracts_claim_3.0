@@ -1,0 +1,15 @@
+node_modules
+.env
+coverage
+coverage.json
+typechain
+typechain-types
+package-lock.json
+.openzeppelin
+# Hardhat files
+cache
+artifacts
+deployments
+near_contract/multisend/Cargo.lock
+.idea
+near_contract/multisend/target
