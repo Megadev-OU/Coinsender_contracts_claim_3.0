@@ -1,5 +1,6 @@
 const { expect } = require('chai')
 const { ethers, upgrades } = require('hardhat')
+const { min } = require('hardhat/internal/util/bigint')
 
 const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
 
@@ -66,7 +67,7 @@ describe('CoinSenderClaim', function () {
       await coinSenderClaim.connect(addr1).sendCoins(erc20_2.address, [addr2.address, addr3.address], amounts, ethers.utils.parseEther('0.01'), { value: ethers.utils.parseEther('0.01') })
 
       // addr2 claiming all tokens
-      await coinSenderClaim.connect(addr2).claimCoinsBatch([addr1.address, addr1.address], [erc20.address, erc20_2.address])
+      await coinSenderClaim.connect(addr2).claimCoinsBatch([addr1.address, addr1.address], [erc20.address, erc20_2.address], minFee, { value: minFee })
 
       // Check balances
       expect(await erc20.balanceOf(addr2.address)).to.equal(ethers.utils.parseEther('10'))
@@ -211,7 +212,7 @@ describe('CoinSenderClaim', function () {
 
       // Check that the recipients have the correct pending claims
       for (let i = 0; i < recipients.length; i++) {
-        await coinSenderClaim.connect(recipients[i]).claimCoinsBatch([addr1.address], [ erc20.address ])
+        await coinSenderClaim.connect(recipients[i]).claimCoinsBatch([addr1.address], [ erc20.address ], minFee, { value: minFee })
         expect((await erc20.balanceOf(recipients[i].address)).toString()).to.equal(amounts[i])
       }
 
@@ -254,7 +255,7 @@ describe('CoinSenderClaim', function () {
 
       // addr1 trying to claim should be rejected
       await expect(
-        coinSenderClaim.connect(addr1).claimCoinsBatch([addr1.address], [erc20.address])
+        coinSenderClaim.connect(addr1).claimCoinsBatch([addr1.address], [erc20.address], minFee, { value: minFee })
       ).to.be.revertedWith('No pending claim found')
 
       // Check claim availability for addr2 and addr3 (should be tokens)
@@ -264,8 +265,8 @@ describe('CoinSenderClaim', function () {
       expect(claimAddr4.length).to.be.greaterThan(0)
 
       // addr2 and addr3 try to claim
-      await coinSenderClaim.connect(addr3).claimCoinsBatch([addr1.address], [erc20.address])
-      await coinSenderClaim.connect(addr4).claimCoinsBatch([addr1.address], [erc20.address])
+      await coinSenderClaim.connect(addr3).claimCoinsBatch([addr1.address], [erc20.address], minFee, { value: minFee })
+      await coinSenderClaim.connect(addr4).claimCoinsBatch([addr1.address], [erc20.address], minFee, { value: minFee })
 
       // Check balances
       expect(await erc20.balanceOf(addr3.address)).to.equal(ethers.utils.parseEther('10'))
@@ -287,7 +288,7 @@ describe('CoinSenderClaim', function () {
       const startBalance = await ethers.provider.getBalance(addr2.address);
 
       // addr2 claims the ETH
-      await coinSenderClaim.connect(addr2).claimCoinsBatch([addr1.address], [NATIVE_TOKEN])
+      await coinSenderClaim.connect(addr2).claimCoinsBatch([addr1.address], [NATIVE_TOKEN], minFee, { value: minFee })
 
       // Check addr2 balance (minus gas fees)
       expect(await ethers.provider.getBalance(addr2.address)).to.be.closeTo(startBalance.add(amounts[0]), ethers.utils.parseEther('0.01'))
@@ -307,7 +308,7 @@ describe('CoinSenderClaim', function () {
 
       // addr2 trying to claim should be rejected
       await expect(
-        coinSenderClaim.connect(addr2).claimCoinsBatch([addr1.address], [NATIVE_TOKEN])
+        coinSenderClaim.connect(addr2).claimCoinsBatch([addr1.address], [NATIVE_TOKEN], minFee, { value: minFee })
       ).to.be.revertedWith('No pending claim found')
 
       // Check that the contract now has the correct balance (it should be zero)
