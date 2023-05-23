@@ -114,6 +114,9 @@ contract CoinSenderClaim is UUPSUpgradeable, ERC2771ContextUpgradeable, OwnableU
 
         for (uint256 i = 0; i < _recipient.length; i++) {
             require(_amount[i] > 0, "CoinSenderClaim: Amount must be greater than 0");
+            require(_recipient[i] != _msgSender(), "CoinSenderClaim: You cannot send coins to yourself");
+            require(_recipient[i] != address(0), "CoinSenderClaim: Recipient address not be zero");
+
             claimsCoins[_recipient[i]][_msgSender()][_currency] += _amount[i];
             totalAmount += _amount[i];
 

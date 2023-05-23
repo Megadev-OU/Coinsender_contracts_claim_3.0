@@ -25,9 +25,9 @@ const networksConfig = {
     gasPrice: 5000000000
   },
   bscTestnet: {
-    url: "https://bsc-testnet.public.blastapi.io",
+    url: "https://data-seed-prebsc-2-s3.binance.org:8545",
     chainId: 97,
-    gasPrice: 5000000000 // 5 Gwei
+    gasPrice: 10000000000 // 5 Gwei
   },
   polygon: {
     url: "https://polygon-mainnet.infura.io/v3/48b0031c00cb4a30b4edf039450af9d6",

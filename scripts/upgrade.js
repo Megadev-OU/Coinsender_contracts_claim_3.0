@@ -2,8 +2,8 @@ const { ethers, upgrades } = require("hardhat");
 const hre = require('hardhat')
 
 // upgrades variables
-const PROXY = '0x43F24cA0306095ba67B44f8d38F7E8Cb8b2466AC';
-const contractName = 'UniswapZap';
+const PROXY = '0x64C4eD8B34710fe29D1ec4cC8B52C11Dc3e45F63';
+const contractName = 'CoinSenderClaimV2';
 
 // upgrade example
 async function main() {

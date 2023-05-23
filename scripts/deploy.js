@@ -10,7 +10,7 @@ async function main() {
 
   console.log("Deploying contracts with the account:", deployer.address);
 
-  const сoinSenderClaim = await ethers.getContractFactory("CoinSenderClaim");
+  const сoinSenderClaim = await ethers.getContractFactory("CoinSenderClaimV2");
 
   // Deploy contract
   const proxy = await upgrades.deployProxy(сoinSenderClaim,
