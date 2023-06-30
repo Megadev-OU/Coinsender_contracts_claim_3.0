@@ -17,7 +17,7 @@ const networksConfig = {
   mainnet: {
     url: "https://mainnet.infura.io/v3/1e9df73b43b24ec7ac8fe5c78754e45a",
     chainId: 1,
-    // gasPrice: 80000000000 // 57
+    // gasPrice: 52000000000 // 57
   },
   binance: {
     url: "https://bscrpc.com",
@@ -43,18 +43,18 @@ const networksConfig = {
   celo: {
     url: "https://celo-mainnet.infura.io/v3/48b0031c00cb4a30b4edf039450af9d6",
     chainId: 42220,
-    gasPrice: 2100000000 // 25 Gwei
+    gasPrice: 5000000000 // 5 Gwei
   },
   moonbeam: {
     url: "https://rpc.api.moonbeam.network",
     chainId: 1284,
-    gasPrice: 100000000000 // 100 Gwei
+    gasPrice: 224760000000 // 224.76 Gwei
   },
   godwoken: {
     url: "https://v1.mainnet.godwoken.io/rpc",
     chainId: 71402,
-    accounts: [`0x${privateKey}`]
-    // gasPrice: 30000000000, // 30 Gwei
+    accounts: [`0x${privateKey}`],
+    gasPrice: 40000000000000, // 30 Gwei
     // gasLimit: 0x1fffffffffffff,
   },
   optimism: {
@@ -65,7 +65,7 @@ const networksConfig = {
   gnosis: {
     url: "https://rpc.gnosischain.com",
     chainId: 100,
-    gasPrice: 1600000000 // 1,6
+    gasPrice: 2500000000 // 2.5
   },
   oasisEmerald: {
     url: "https://emerald.oasis.dev",
@@ -124,7 +124,7 @@ const networksConfig = {
   heco: {
     url: "https://http-mainnet.hecochain.com",
     accounts: [privateKey],
-    // gasPrice: 1000000000, // 1 GWei
+    gasPrice: 2300000000, // 2,3 GWei
     chainId: 128
   },
   okexchain: {
@@ -146,14 +146,17 @@ const networksConfig = {
 }
 
 function createConfig (network) {
-  const gasPrice = 10000000000  // 10 Gwei default
-
-  return {
+  // const gasPrice = 10000000000  // 10 Gwei default
+  const config = {
     accounts: [`${privateKey}`],
     ...networksConfig[network],
-
-    // gasPrice: networksConfig[network].gasPrice || gasPrice
   }
+
+  if (networksConfig[network].gasPrice) {
+    config.gasPrice = networksConfig[network].gasPrice;
+  }
+
+  return config;
 }
 
 const config = {
