@@ -68,4 +68,12 @@ library CurrencyTransferLib {
             "!BAL20"
         );
     }
+
+    function getBalance(address _currency, address _account) internal view returns (uint256) {
+        if (_currency == NATIVE_TOKEN) {
+            return _account.balance;
+        } else {
+            return IERC20Upgradeable(_currency).balanceOf(_account);
+        }
+    }
 }

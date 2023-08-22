@@ -7,7 +7,7 @@
  * @dev This contract allows for non-custodial transfer of tokens.
  *
  * Company: CoinSender
- * Developed by: Manchenko
+ * Developed by: Manchenko V
  *
  * The CoinSender contract includes functionalities of tracking token transfers,
  * cancelling pending transfers, and claiming tokens by the recipient.
@@ -38,7 +38,7 @@ import "@thirdweb-dev/contracts/openzeppelin-presets/metatx/ERC2771ContextUpgrad
 
 import "./lib/CurrencyTransferLib.sol";
 
-contract CoinSenderClaimV2 is
+contract CoinSenderClaimVestingV1 is
     Initializable,
     UUPSUpgradeable,
     ERC2771ContextUpgradeable,
@@ -84,10 +84,39 @@ contract CoinSenderClaimV2 is
 
     struct Transfer {
         uint256 id;
-        address recipient;
         address sender;
+        // recipient of tokens after they are released
+        address recipient;
+        // token address or native token
         address coin;
-        uint amount;
+        // total amount of tokens to be released at the end of the vesting
+        uint256 amount;
+        // cliff time of the vesting start in seconds since the UNIX epoch
+        uint256 cliff;
+        // start time of the vesting period in seconds since the UNIX epoch
+        uint256 start;
+        // duration of the vesting period in seconds
+        uint256 duration;
+        // duration of a slice period for the vesting in seconds
+        uint256 slicePeriodSeconds;
+        // whether or not the vesting is revocable
+        bool revocable;
+        // amount of tokens released
+        uint256 released;
+        // whether or not the vesting has been revoked
+        bool revoked;
+    }
+
+    struct SendCoinsData {
+        address currency;
+        address[] recipient;
+        uint256[] amount;
+        uint256 cliff;
+        uint256 start;
+        uint256 duration;
+        uint256 slicePeriodSeconds;
+        bool revocable;
+        uint256 fee;
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -148,59 +177,60 @@ contract CoinSenderClaimV2 is
         emit MinFeeChanged(oldMinFee, _minFee);
     }
 
-    /**
-    * @dev Sends specified amount of coins to the specified recipients. The function also accounts for a fee
-    * that will be deducted from the sent funds.
-    *
-    * @param _currency The address of the token to be sent. Use address 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE for Ether.
-    * @param _recipient An array of recipient addresses. Should be the same length as _amount array.
-    * @param _amount An array of amounts to send to each recipient. Should be the same length as _recipient array.
-    * @param _fee The fee to be deducted from the sent funds.
-    *
-    * The sender of the function must have enough tokens or Ether in their account to perform the transfer,
-    * including the fee.
-    *
-    * This function calls an external contract (the ERC20 token or the recipient address). Consider the reentrancy
-    * risks and the need for a check-effects-interactions pattern.
-    *
-    * IMPORTANT: The function assumes that the addresses and amounts have been previously validated and are correct.
-    * It doesn't perform additional input validation.
-    */
-    function sendCoins(address _currency, address[] calldata _recipient, uint256[] calldata _amount, uint256 _fee)
-    external payable nonReentrant whenNotPaused
+    function sendCoins(SendCoinsData memory data) external payable nonReentrant whenNotPaused
     {
-        require(_currency != address(0), "CoinSenderClaim: Token address cannot be zero address");
-        require(_recipient.length > 0, "CoinSenderClaim: Recipients array cannot be empty");
-        require(_recipient.length == _amount.length, "CoinSenderClaim: Recipients and amounts arrays should have the same length");
+        require(data.currency != address(0), "CoinSenderClaim: Token address cannot be zero address");
+        require(data.recipient.length > 0, "CoinSenderClaim: Recipients array cannot be empty");
+        require(data.recipient.length == data.amount.length, "CoinSenderClaim: Recipients and amounts arrays should have the same length");
+        require(data.duration > 0, "CoinSenderClaim: duration must be > 0");
+        require(
+            data.slicePeriodSeconds >= 1,
+            "TokenVesting: slicePeriodSeconds must be >= 1"
+        );
+        require(data.duration >= data.cliff, "TokenVesting: duration must be >= cliff");
 
+        uint256 cliff = data.start + data.cliff;
         uint256 totalAmount = 0;
         uint256 transferId;
-        uint256[] memory ids = new uint256[](_recipient.length);
+        uint256[] memory ids = new uint256[](data.recipient.length);
 
-        for (uint256 i = 0; i < _recipient.length; i++) {
-            require(_amount[i] > 0, "CoinSenderClaim: Amount must be greater than 0");
-            require(_recipient[i] != _msgSender(), "CoinSenderClaim: You cannot send coins to yourself");
-            require(_recipient[i] != address(0), "CoinSenderClaim: Recipient address not be zero");
+        for (uint256 i = 0; i < data.recipient.length; i++) {
+            require(data.amount[i] > 0, "CoinSenderClaim: Amount must be greater than 0");
+            require(data.recipient[i] != _msgSender(), "CoinSenderClaim: You cannot send coins to yourself");
+            require(data.recipient[i] != address(0), "CoinSenderClaim: Recipient address not be zero");
 
             transferId = transferIdCounter.current();
             ids[i] = transferId;
 
-            totalAmount += _amount[i];
-            transfers[transferId] = Transfer(transferId, _recipient[i], _msgSender(), _currency, _amount[i]);
-            _addTransferId(_msgSender(), _recipient[i], transferId);
+            totalAmount += data.amount[i];
+            transfers[transferId] = Transfer(
+                transferId,
+                _msgSender(),
+                data.recipient[i],
+                data.currency,
+                data.amount[i],
+                cliff,
+                data.start,
+                data.duration,
+                data.slicePeriodSeconds,
+                data.revocable,
+                0,
+                false
+            );
+            _addTransferId(_msgSender(), data.recipient[i], transferId);
 
             transferIdCounter.increment();
         }
 
-        if (_currency == CurrencyTransferLib.NATIVE_TOKEN) {
-            require(msg.value >= _fee + totalAmount, "CoinSenderClaim: Insufficient ETH sent to cover fee and total amount");
+        if (data.currency == CurrencyTransferLib.NATIVE_TOKEN) {
+            require(msg.value >= data.fee + totalAmount, "CoinSenderClaim: Insufficient ETH sent to cover fee and total amount");
         }
 
-        _processFee(_fee);
+        _processFee(data.fee);
 
-        CurrencyTransferLib.transferCurrency(_currency, _msgSender(), payable(address(this)), totalAmount);
+        CurrencyTransferLib.transferCurrency(data.currency, _msgSender(), payable(address(this)), totalAmount);
 
-        emit CoinSent(_currency, ids);
+        emit CoinSent(data.currency, ids);
     }
 
     /**
@@ -262,7 +292,7 @@ contract CoinSenderClaimV2 is
     * Each of the transfers must be in a cancelable state.
     */
     function cancel(uint256[] calldata _transferIds)
-    external nonReentrant
+    external nonReentrant whenNotPaused
     {
         require(_transferIds.length > 0, "No transfer IDs provided");
 
@@ -280,32 +310,60 @@ contract CoinSenderClaimV2 is
     }
 
     function __claim(address _claimant, uint256 _transferId) private {
-        Transfer memory transfer = transfers[_transferId];
+        Transfer storage transfer = transfers[_transferId];
+
         require(transfer.amount > 0, "No pending claim found");
         require(transfer.recipient == _claimant, "Claimant is not the recipient of the transfer");
         require(recipientTransfers[_claimant].contains(transfer.id), "The claimant is not the recipient for this transfer ID");
 
-        transfers[_transferId].amount = 0;
-        _removeTransferId(transfer.sender, transfer.recipient, _transferId);
+        uint256 releasable = _releasableAmount(transfer);
+        require(releasable > 0, "No releasable amount at the moment");
 
-        CurrencyTransferLib.transferCurrency(transfer.coin, address(this), payable(_claimant), transfer.amount);
+        transfer.released += releasable;
+
+        if (transfer.released >= transfer.amount) {
+            transfers[_transferId].amount = 0;
+            _removeTransferId(transfer.sender, transfer.recipient, _transferId);
+        }
+
+        CurrencyTransferLib.transferCurrency(transfer.coin, address(this), payable(_claimant), releasable);
 
         emit CoinClaimed(transfer.sender, _transferId);
     }
 
+    function _releasableAmount(Transfer memory transfer) private view returns (uint256) {
+        uint256 currentTime = block.timestamp;
+        if (currentTime < transfer.cliff) {
+            return 0;
+        }
+        else if (currentTime >= transfer.start + transfer.duration) {
+            return transfer.amount - transfer.released;
+        }
+        else {
+            uint256 elapsedSeconds = currentTime - transfer.start;
+            uint256 vestedAmount = (transfer.amount * elapsedSeconds) / transfer.duration;
+            return vestedAmount - transfer.released;
+        }
+    }
+
     function __cancel(address _requestor, uint256 _transferId) private {
-        Transfer memory transfer = transfers[_transferId];
+        Transfer storage transfer = transfers[_transferId];
+
         require(transfer.amount > 0, "No transfer found");
         require(transfer.sender == _requestor, "Requestor is not the sender of the transfer");
         require(senderTransfers[_requestor].contains(_transferId), "The requestor did not initiate this transfer");
+        require(transfer.revocable, "This transfer is not revocable");
+
+        uint256 refundAmount = transfer.amount - transfer.released; //// Only returning the unreleased tokens
 
         transfers[_transferId].amount = 0;
         _removeTransferId(transfer.sender, transfer.recipient, _transferId);
 
-        CurrencyTransferLib.transferCurrency(transfer.coin, address(this), payable(transfer.sender), transfer.amount);
+        CurrencyTransferLib.transferCurrency(transfer.coin, address(this), payable(transfer.sender), refundAmount);
 
         emit CancelTransfer(_msgSender(), _transferId);
     }
+
 
     function __getTransfers(EnumerableSetUpgradeable.UintSet storage set) private view returns (Transfer[] memory) {
         Transfer[] memory transfersList = new Transfer[](set.length());
@@ -366,6 +424,18 @@ contract CoinSenderClaimV2 is
     returns (bool)
     {
         return super.supportsInterface(interfaceId);
+    }
+
+    function emergencyWithdraw(address tokenAddress) external onlyOwner whenPaused {
+        uint256 balance = CurrencyTransferLib.getBalance(tokenAddress, address(this));
+        require(balance > 0, "No funds to withdraw");
+        CurrencyTransferLib.transferCurrency(tokenAddress, address(this), payable(msg.sender), balance);
+    }
+
+    function emergencyWithdrawETH() external onlyOwner whenPaused {
+        uint256 balance = CurrencyTransferLib.getBalance(CurrencyTransferLib.NATIVE_TOKEN, address(this));
+        require(balance > 0, "No ETH to withdraw");
+        CurrencyTransferLib.transferCurrency(CurrencyTransferLib.NATIVE_TOKEN, address(this), payable(msg.sender), balance);
     }
 
     /**
