@@ -35,3 +35,6 @@ import "./interfaces/IUniswapV2Router02.sol";
 - `changeRouter`: Changes the Uniswap router address.
 - `changeMinFee`: Changes the minimum fee amount.
 - `changeBankAddress`: Changes the fee collector address.
+
+
+CoinSenderClaimVestingV1 deployed to: 0x3C16FD3a5BaAC4e85b0172291cD12d37156cEF54

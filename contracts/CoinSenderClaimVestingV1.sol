@@ -115,7 +115,7 @@ contract CoinSenderClaimVestingV1 is
         uint256 start;
         uint256 duration;
         uint256 slicePeriodSeconds;
-        bool revocable;
+        bool revocable; /// true
         uint256 fee;
     }
 
@@ -248,6 +248,11 @@ contract CoinSenderClaimVestingV1 is
         return __getTransfers(recipientTransfers[_recipient]);
     }
 
+    function availableForWithdrawal(uint256 _transferId) public view returns (uint256) {
+        Transfer memory transfer = transfers[_transferId];
+        return _releasableAmount(transfer);
+    }
+
     /**
     * @dev Returns an array of sent coins for the specified sender.
     *
@@ -340,8 +345,12 @@ contract CoinSenderClaimVestingV1 is
             return transfer.amount - transfer.released;
         }
         else {
-            uint256 elapsedSeconds = currentTime - transfer.start;
-            uint256 vestedAmount = (transfer.amount * elapsedSeconds) / transfer.duration;
+            uint256 timeFromStart = currentTime - transfer.start;
+            uint256 secondsPerSlice = transfer.slicePeriodSeconds;
+            uint256 vestedSlicePeriods = timeFromStart / secondsPerSlice;
+            uint256 vestedSeconds = vestedSlicePeriods * secondsPerSlice;
+            // Compute the amount of tokens that are vested.
+            uint256 vestedAmount = (transfer.amount * vestedSeconds) / transfer.duration;
             return vestedAmount - transfer.released;
         }
     }
