@@ -152,8 +152,6 @@ contract CoinSenderClaimVestingV1 is
         minFee = _minFee;
     }
 
-    receive() external payable {}
-
     /**
     * @dev Sets the bank address
     *
